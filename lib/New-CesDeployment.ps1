@@ -1,4 +1,4 @@
-Function New-CepDeployment {
+Function New-CesDeployment {
 
     [cmdletbinding()]
     param(
@@ -10,10 +10,10 @@ Function New-CepDeployment {
         [String]
         $Alias,
 
-        [Parameter(Mandatory=$False)]
-        [ValidateNotNullorEmpty()]
+        [ValidateScript({$_.Contains("\")})]
+        [Parameter(Mandatory=$True)]
         [String]
-        $FriendlyName = [System.Net.Dns]::GetHostByName($env:COMPUTERNAME).HostName,
+        $ConfigString,
 
         [ValidateSet("UserName","Kerberos","Certificate")]
         [Parameter(Mandatory=$False)]
@@ -60,7 +60,7 @@ Function New-CepDeployment {
         # Install all necessary Windows Features
         Add-WindowsFeature RSAT-AD-PowerShell
         Add-WindowsFeature Web-Server -IncludeManagementTools
-        Add-WindowsFeature ADCS-Enroll-Web-Pol
+        Add-WindowsFeature ADCS-Enroll-Web-Svc
 
         Import-Module ActiveDirectory
         Import-Module WebAdministration
@@ -83,33 +83,36 @@ Function New-CepDeployment {
 
         If ($Alias) {
             $ServicePrincipalNames = @("HTTP/$Alias")
-            $FriendlyName = $Alias
         }
         Else {
             $ServicePrincipalNames = @("HTTP/$ServerName","HTTP/$ServerShortName")
-            $FriendlyName = $ServerName
         }
 
     }
 
     process {
-        # Deploy the CEP Roles
+
+        $CaServerName = $ConfigString.Split("\")[0]
+        $CaName = $ConfigString.Split("\")[1]
+
+        # Deploy the CES Roles
         $AuthenticationType | ForEach-Object -Process {
 
-            Write-Verbose -Message "Installing CEP with $_ Authentication"
+            Write-Verbose -Message "Installing CES with $_ Authentication"
 
             $Arguments = @{
+                CAConfig = $ConfigString
                 SSLCertThumbprint = $SSLCertificate.Thumbprint
                 AuthenticationType = $_
                 Force = $True
             }
 
-            # Install the CEP Services
-            Install-AdcsEnrollmentPolicyWebService @Arguments
-
-            If (($_ -ne "Kerberos") -and $KeybasedRenewal.IsPresent) {
-                Install-AdcsEnrollmentPolicyWebService @Arguments -KeyBasedRenewal
+            If (($_ -eq "Certificate") -and $KeybasedRenewal.IsPresent) {
+                $Arguments.Add("RenewalOnly", $True)
+                $Arguments.Add("AllowKeyBasedRenewal", $True)
             }
+            
+            Install-AdcsEnrollmentWebService @Arguments
 
         }
 
@@ -163,8 +166,17 @@ Function New-CepDeployment {
             $ADUserObject | Set-ADObject `
                 -Add @{"serviceprincipalname"=$ServicePrincipalNames}
 
+            # Configure Delegation Settings for CES
+            $AllowedToDelegateTo = @(
+                "rpcss/$CaServerName",
+                "HOST/$CaServerName"
+            )
+
+            $ADUserObject | Set-ADObject `
+                -Add @{"msDS-AllowedToDelegateTo"=$AllowedToDelegateTo}
+
             $Arguments = @{
-                Name = "WSEnrollmentPolicyServer"
+                Name = "WSEnrollmentServer"
                 UserName = "$DomainName\$UserName"
             }
 
@@ -176,55 +188,28 @@ Function New-CepDeployment {
 
         }
 
-        If ($AuthenticationType -contains "UserName") {
-
-            Set-IISFriendlyName `
-                -Location "Default Web Site/ADPolicyProvider_CEP_UsernamePassword" `
-                -FriendlyName "$FriendlyName (UserName)"
-
-            If ($KeyBasedRenewal.IsPresent) {
-                Set-IISFriendlyName `
-                    -Location "Default Web Site/KeyBasedRenewal_ADPolicyProvider_CEP_UsernamePassword" `
-                    -FriendlyName "$FriendlyName (UserName, Key based Renewal)" 
-            }
-
-        }
-
-        If ($AuthenticationType -contains "Certificate") {
-            
-            Set-IISFriendlyName `
-                -Location "Default Web Site/ADPolicyProvider_CEP_Certificate" `
-                -FriendlyName "$FriendlyName (Certificate)"
-
-            If ($KeyBasedRenewal.IsPresent) {
-                Set-IISFriendlyName `
-                    -Location "Default Web Site/KeyBasedRenewal_ADPolicyProvider_CEP_Certificate" `
-                    -FriendlyName "$FriendlyName (Certificate, Key based Renewal)" 
-            }
-
-        }
-
         If ($AuthenticationType -contains "Kerberos") {
-
-            Set-IISFriendlyName `
-                -Location "Default Web Site/ADPolicyProvider_CEP_Kerberos" `
-                -FriendlyName "$FriendlyName (Kerberos)"
 
             If ($ServiceAccount -or $ServiceGMSA) {
 
                 Disable-IISKernelModeAuthentication `
-                    -Location "Default Web Site/ADPolicyProvider_CEP_Kerberos"
+                    -Location "Default Web Site/$($CaName.Replace(" ", "%20"))_CES_Kerberos"
     
                 Disable-IISNTLMAuthentication `
-                    -Location "Default Web Site/ADPolicyProvider_CEP_Kerberos"
+                    -Location "Default Web Site/$($CaName.Replace(" ", "%20"))_CES_Kerberos"
 
             }
 
         }
+
+        <#
+            To Do: Configure Enrollment URLs
+        #>
 
     }
 
     end {
         Restart-Service w3svc
     }
+
 }

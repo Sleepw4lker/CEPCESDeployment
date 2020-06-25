@@ -5,11 +5,17 @@ Get-ChildItem -Path "$Script:BaseDirectory\lib" -Filter *.ps1 | ForEach-Object {
     . ($_.FullName)
 }
 
-.\Remove-Deployment.ps1
-
 New-CepDeployment `
     -SSLCertificate (Get-ChildItem -Path Cert:\LocalMachine\my\56CC9EEDFB282E91F2BC4C89D843677ED1D8E278) `
     -FriendlyName "ADCS Labor CEP" `
+    -Alias "cep.adcslabor.de" `
+    -ServiceGMSA "INTRA\gmsa_CEP$" `
+    -AuthenticationType Username,Kerberos,Certificate `
+    -Keybasedrenewal
+
+New-CesDeployment `
+    -ConfigString "ca02.intra.adcslabor.de\ADCS Labor Issuing CA 1" `
+    -SSLCertificate (Get-ChildItem -Path Cert:\LocalMachine\my\56CC9EEDFB282E91F2BC4C89D843677ED1D8E278) `
     -Alias "cep.adcslabor.de" `
     -ServiceGMSA "INTRA\gmsa_CEP$" `
     -AuthenticationType Username,Kerberos,Certificate `
