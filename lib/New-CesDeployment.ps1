@@ -94,6 +94,7 @@ Function New-CesDeployment {
 
         $CaServerName = $ConfigString.Split("\")[0]
         $CaName = $ConfigString.Split("\")[1]
+        $CaPlainServerName = $ConfigString.Split(".")[0]
 
         # Deploy the CES Roles
         $AuthenticationType | ForEach-Object -Process {
@@ -202,9 +203,57 @@ Function New-CesDeployment {
 
         }
 
-        <#
-            To Do: Configure Enrollment URLs
-        #>
+        # Configure Enrollment URLs
+
+        If ($Alias) {
+
+            $AuthenticationType | ForEach-Object -Process {
+
+                Write-Verbose -Message "Configuring Enrollment Url for $_ Authentication"
+
+                Try {
+
+                    Switch ($_) {
+
+                        "Kerberos" {
+                            certutil -config "$($CaServerName)\$($CaName)" -enrollmentserverurl "https://$($ServerName)/$($CaName.Replace(" ", "%20"))_CES_Kerberos/service.svc/CES" delete
+                            certutil -config "$($CaServerName)\$($CaName)" -enrollmentserverurl "https://$($ServerShortName)/$($CaName.Replace(" ", "%20"))_CES_Kerberos/service.svc/CES" delete
+                            certutil -config "$($CaServerName)\$($CaName)" -enrollmentserverurl "https://$($Alias)/$($CaName.Replace(" ", "%20"))_CES_Kerberos/service.svc/CES" Kerberos 1
+
+                        }
+
+                        "Username" {
+
+                            certutil -config "$($CaServerName)\$($CaName)" -enrollmentserverurl "https://$($ServerName)/$($CaName.Replace(" ", "%20"))_CES_Kerberos/service.svc/CES" delete
+                            certutil -config "$($CaServerName)\$($CaName)" -enrollmentserverurl "https://$($ServerShortName)/$($CaName.Replace(" ", "%20"))_CES_Kerberos/service.svc/CES" delete
+                            certutil -config "$($CaServerName)\$($CaName)" -enrollmentserverurl "https://$($Alias)/$($CaName.Replace(" ", "%20"))_CES_UsernamePassword/service.svc/CES" UserName 1
+
+                        }
+
+                        "Certificate" {
+                            
+                            certutil -config "$($CaServerName)\$($CaName)" -enrollmentserverurl "https://$($ServerName)/$($CaName.Replace(" ", "%20"))_CES_Kerberos/service.svc/CES" delete
+                            certutil -config "$($CaServerName)\$($CaName)" -enrollmentserverurl "https://$($ServerShortName)/$($CaName.Replace(" ", "%20"))_CES_Kerberos/service.svc/CES" delete
+
+                            If ($KeybasedRenewal.IsPresent) {
+                                certutil -config "$($CaServerName)\$($CaName)" -enrollmentserverurl "https://$($Alias)/$($CaName.Replace(" ", "%20"))_CES_Certificate/service.svc/CES" ClientCertificate 1 AllowRenewalsOnly,AllowKeyBasedRenewal
+                            }
+                            Else {
+                                certutil -config "$($CaServerName)\$($CaName)" -enrollmentserverurl "https://$($Alias)/$($CaName.Replace(" ", "%20"))_CES_Certificate/service.svc/CES" ClientCertificate 1
+                            }
+
+                        }
+
+                    }
+                }
+                Catch {
+                    #
+                }
+
+            }
+
+        }
+
 
     }
 
