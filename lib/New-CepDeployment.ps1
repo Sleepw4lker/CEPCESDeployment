@@ -102,11 +102,11 @@ Function New-CepDeployment {
 
         If ($Alias) {
             $ServicePrincipalNames = @("HTTP/$Alias")
-            $FriendlyName = $Alias
+            #$FriendlyName = $Alias
         }
         Else {
             $ServicePrincipalNames = @("HTTP/$ServerName","HTTP/$ServerShortName")
-            $FriendlyName = $ServerName
+            #$FriendlyName = $ServerName
         }
 
         # Deploy the CEP Roles
