@@ -77,6 +77,7 @@ Function New-CepDeployment {
             Write-Warning -Message "Rebooting in 15 Seconds, press Crtl-C to abort."
             Write-Warning -Message "Repeat Installation after Reboot"
             Start-Sleep -Seconds 15
+            Restart-Computer
             return
         }
 
