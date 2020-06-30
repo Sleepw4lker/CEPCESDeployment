@@ -9,7 +9,7 @@ Function Disable-IISNTLMAuthentication {
     )
 
     begin {
-        #Import-Module WebAdministration
+        Import-Module WebAdministration
     }
 
     process {
@@ -17,22 +17,24 @@ Function Disable-IISNTLMAuthentication {
         Write-Verbose "Disabling NTLM Authentication for $Location"
 
         Try {
+
+            Remove-WebConfigurationProperty `
+                -PSPath 'MACHINE/WEBROOT/APPHOST' `
+                -Location $Location `
+                -Filter "system.webServer/security/authentication/windowsAuthentication/providers" `
+                -Name "." `
+                -AtElement @{value='Negotiate'}
+
             Add-WebConfigurationProperty `
                 -PSPath 'MACHINE/WEBROOT/APPHOST' `
                 -Location $Location `
                 -Filter "system.webServer/security/authentication/windowsAuthentication/providers" `
                 -Name "." `
                 -Value @{value='Negotiate:Kerberos'}
-            
-            Remove-WebConfigurationProperty `
-                -PSPath 'MACHINE/WEBROOT/APPHOST' `
-                -LÖocation $Location `
-                -Filter "system.webServer/security/authentication/windowsAuthentication/providers" `
-                -Name "." `
-                -AtElement @{value='Negotiate'}
+
         }
         Catch {
-            Write-Verbose -Message "Unable to disable NTLM Authentication for $Location"
+            Write-Warning -Message "Unable to disable NTLM Authentication for $Location"
         }
 
     }

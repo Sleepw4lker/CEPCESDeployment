@@ -50,6 +50,10 @@ Function New-CesDeployment {
 
     begin {
 
+    }
+
+    process {
+
         # Abort if not Admin
         If (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
             Write-Error `
@@ -58,9 +62,23 @@ Function New-CesDeployment {
         }
 
         # Install all necessary Windows Features
-        Add-WindowsFeature RSAT-AD-PowerShell
-        Add-WindowsFeature Web-Server -IncludeManagementTools
-        Add-WindowsFeature ADCS-Enroll-Web-Svc
+        $RestartRequired = $False
+        "RSAT-AD-PowerShell","Web-Server","ADCS-Enroll-Web-Svc" | ForEach-Object -Process {
+
+            If ((Get-WindowsFeature $_).Installed -ne $True) {
+                $InstallResult = Install-WindowsFeature $_ -IncludeManagementTools
+                If ($InstallResult.restartneeded -ne 'no') {
+                    $RestartRequired = $True
+                }
+            }
+        }
+
+        If ($RestartRequired -eq $True) {
+            Write-Warning -Message "Rebooting in 15 Seconds, press Crtl-C to abort."
+            Write-Warning -Message "Repeat Installation after Reboot"
+            Start-Sleep -Seconds 15
+            return
+        }
 
         Import-Module ActiveDirectory
         Import-Module WebAdministration
@@ -88,13 +106,8 @@ Function New-CesDeployment {
             $ServicePrincipalNames = @("HTTP/$ServerName","HTTP/$ServerShortName")
         }
 
-    }
-
-    process {
-
         $CaServerName = $ConfigString.Split("\")[0]
         $CaName = $ConfigString.Split("\")[1]
-        $CaPlainServerName = $ConfigString.Split(".")[0]
 
         # Deploy the CES Roles
         $AuthenticationType | ForEach-Object -Process {
@@ -194,10 +207,10 @@ Function New-CesDeployment {
             If ($ServiceAccount -or $ServiceGMSA) {
 
                 Disable-IISKernelModeAuthentication `
-                    -Location "Default Web Site/$($CaName.Replace(" ", "%20"))_CES_Kerberos"
+                    -Location "Default Web Site/$($CaName)_CES_Kerberos"
     
                 Disable-IISNTLMAuthentication `
-                    -Location "Default Web Site/$($CaName.Replace(" ", "%20"))_CES_Kerberos"
+                    -Location "Default Web Site/$($CaName)_CES_Kerberos"
 
             }
 
@@ -254,11 +267,12 @@ Function New-CesDeployment {
 
         }
 
+        Restart-Service w3svc
 
     }
 
     end {
-        Restart-Service w3svc
+        
     }
 
 }

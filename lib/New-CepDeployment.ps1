@@ -50,6 +50,10 @@ Function New-CepDeployment {
 
     begin {
 
+    }
+
+    process {
+
         # Abort if not Admin
         If (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
             Write-Error `
@@ -58,9 +62,23 @@ Function New-CepDeployment {
         }
 
         # Install all necessary Windows Features
-        Add-WindowsFeature RSAT-AD-PowerShell
-        Add-WindowsFeature Web-Server -IncludeManagementTools
-        Add-WindowsFeature ADCS-Enroll-Web-Pol
+        $RestartRequired = $False
+        "RSAT-AD-PowerShell","Web-Server","ADCS-Enroll-Web-Pol" | ForEach-Object -Process {
+
+            If ((Get-WindowsFeature $_).Installed -ne $True) {
+                $InstallResult = Install-WindowsFeature $_ -IncludeManagementTools
+                If ($InstallResult.restartneeded -ne 'no') {
+                    $RestartRequired = $True
+                }
+            }
+        }
+
+        If ($RestartRequired -eq $True) {
+            Write-Warning -Message "Rebooting in 15 Seconds, press Crtl-C to abort."
+            Write-Warning -Message "Repeat Installation after Reboot"
+            Start-Sleep -Seconds 15
+            return
+        }
 
         Import-Module ActiveDirectory
         Import-Module WebAdministration
@@ -90,9 +108,6 @@ Function New-CepDeployment {
             $FriendlyName = $ServerName
         }
 
-    }
-
-    process {
         # Deploy the CEP Roles
         $AuthenticationType | ForEach-Object -Process {
 
@@ -222,9 +237,11 @@ Function New-CepDeployment {
 
         }
 
+        Restart-Service w3svc
+
     }
 
     end {
-        Restart-Service w3svc
+        
     }
 }

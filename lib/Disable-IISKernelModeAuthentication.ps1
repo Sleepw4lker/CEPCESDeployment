@@ -9,26 +9,24 @@ Function Disable-IISKernelModeAuthentication {
     )
 
     begin {
-        #Import-Module WebAdministration
+        Import-Module WebAdministration
     }
 
     process {
-
-        $Filter = "/system.webServer/security/authentication/windowsAuthentication"
-        $Name = "useKernelMode"
 
         Write-Verbose "Disabling Kernel Mode Authentication for $Location"
 
         Try {
             Set-WebConfigurationProperty `
-                -Filter $Filter `
-                -Name $Name `
-                -Value "False" `
-                -PSPath IIS: `
-                -Location $Location
+                -PSPath 'MACHINE/WEBROOT/APPHOST' `
+                -Location $Location `
+                -Filter "system.webServer/security/authentication/windowsAuthentication" `
+                -Name "useKernelMode" `
+                -Value "False"
+                
         }
         Catch {
-            Write-Verbose -Message "Unable to disable Kernel Mode Authentication for $Location"
+            Write-Warning -Message "Unable to disable Kernel Mode Authentication for $Location"
         }
 
     }
