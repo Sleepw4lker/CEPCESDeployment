@@ -93,7 +93,7 @@ Function New-CesDeployment {
 
         If (-not ($GroupMemberships -contains $EnterpriseAdminsGroup)) {
             Write-Error `
-                -Message "You must be Enterprise Administrator for the CEP Installation!"
+                -Message "You must be Enterprise Administrator for the CES Installation!"
             return
         }
 
@@ -179,16 +179,37 @@ Function New-CesDeployment {
                 -ErrorAction SilentlyContinue
 
             $ADUserObject | Set-ADObject `
-                -Add @{"serviceprincipalname"=$ServicePrincipalNames}
+                -Replace @{"serviceprincipalname"=$ServicePrincipalNames}
 
             # Configure Delegation Settings for CES
-            $AllowedToDelegateTo = @(
-                "rpcss/$CaServerName",
-                "HOST/$CaServerName"
-            )
 
-            $ADUserObject | Set-ADObject `
-                -Add @{"msDS-AllowedToDelegateTo"=$AllowedToDelegateTo}
+            If (
+                ($AuthenticationType -contains "Kerberos") -or
+                ($AuthenticationType -contains "Certificate")
+            ) {
+                # Kerberos Constrained Delegation, use Kerberos only
+
+                $AllowedToDelegateTo = @(
+                    "rpcss/$CaServerName",
+                    "HOST/$CaServerName"
+                )
+    
+                $ADUserObject | Set-ADObject `
+                    -Replace @{"msDS-AllowedToDelegateTo"=$AllowedToDelegateTo}
+
+            }
+
+            If (
+                ($AuthenticationType -contains "Certificate") -and
+                (-not $KeybasedRenewal.IsPresent)
+            ) {
+
+                # Constrained Delegation, use any Service
+                # Set TRUSTED_TO_AUTH_FOR_DELEGATION Flag
+                $ADUserObject | Set-ADAccountControl `
+                    -TrustedToAuthForDelegation $True
+
+            }
 
             $Arguments = @{
                 Name = "WSEnrollmentServer"
@@ -223,7 +244,7 @@ Function New-CesDeployment {
 
             $AuthenticationType | ForEach-Object -Process {
 
-                Write-Verbose -Message "Configuring Enrollment Url for $_ Authentication"
+                Write-Verbose -Message "Configuring Enrollment URI for $_ Authentication"
 
                 Try {
 
@@ -232,15 +253,16 @@ Function New-CesDeployment {
                         "Kerberos" {
                             certutil -config "$($CaServerName)\$($CaName)" -enrollmentserverurl "https://$($ServerName)/$($CaName.Replace(" ", "%20"))_CES_Kerberos/service.svc/CES" delete
                             certutil -config "$($CaServerName)\$($CaName)" -enrollmentserverurl "https://$($ServerShortName)/$($CaName.Replace(" ", "%20"))_CES_Kerberos/service.svc/CES" delete
-                            certutil -config "$($CaServerName)\$($CaName)" -enrollmentserverurl "https://$($Alias)/$($CaName.Replace(" ", "%20"))_CES_Kerberos/service.svc/CES" Kerberos 1
-
+                            $Node = "$($CaName)_CES_Kerberos"
+                            certutil -config "$($CaServerName)\$($CaName)" -enrollmentserverurl "https://$($Alias)/$($Node.Replace(" ", "%20"))/service.svc/CES" Kerberos 1
                         }
 
                         "Username" {
 
                             certutil -config "$($CaServerName)\$($CaName)" -enrollmentserverurl "https://$($ServerName)/$($CaName.Replace(" ", "%20"))_CES_Kerberos/service.svc/CES" delete
                             certutil -config "$($CaServerName)\$($CaName)" -enrollmentserverurl "https://$($ServerShortName)/$($CaName.Replace(" ", "%20"))_CES_Kerberos/service.svc/CES" delete
-                            certutil -config "$($CaServerName)\$($CaName)" -enrollmentserverurl "https://$($Alias)/$($CaName.Replace(" ", "%20"))_CES_UsernamePassword/service.svc/CES" UserName 1
+                            $Node = "$($CaName)_CES_UsernamePassword"
+                            certutil -config "$($CaServerName)\$($CaName)" -enrollmentserverurl "https://$($Alias)/$($Node.Replace(" ", "%20"))/service.svc/CES" UserName 1
 
                         }
 
@@ -248,17 +270,22 @@ Function New-CesDeployment {
                             
                             certutil -config "$($CaServerName)\$($CaName)" -enrollmentserverurl "https://$($ServerName)/$($CaName.Replace(" ", "%20"))_CES_Kerberos/service.svc/CES" delete
                             certutil -config "$($CaServerName)\$($CaName)" -enrollmentserverurl "https://$($ServerShortName)/$($CaName.Replace(" ", "%20"))_CES_Kerberos/service.svc/CES" delete
+                            $Node = "$($CaName)_CES_Certificate"
 
                             If ($KeybasedRenewal.IsPresent) {
-                                certutil -config "$($CaServerName)\$($CaName)" -enrollmentserverurl "https://$($Alias)/$($CaName.Replace(" ", "%20"))_CES_Certificate/service.svc/CES" ClientCertificate 1 AllowRenewalsOnly,AllowKeyBasedRenewal
+                                certutil -config "$($CaServerName)\$($CaName)" -enrollmentserverurl "https://$($Alias)/$($Node.Replace(" ", "%20"))/service.svc/CES" ClientCertificate 1 AllowRenewalsOnly,AllowKeyBasedRenewal
                             }
                             Else {
-                                certutil -config "$($CaServerName)\$($CaName)" -enrollmentserverurl "https://$($Alias)/$($CaName.Replace(" ", "%20"))_CES_Certificate/service.svc/CES" ClientCertificate 1
+                                certutil -config "$($CaServerName)\$($CaName)" -enrollmentserverurl "https://$($Alias)/$($Node.Replace(" ", "%20"))/service.svc/CES" ClientCertificate 1
                             }
 
                         }
 
                     }
+
+                    Set-IISURI  `
+                        -Location "Default Web Site/$Node" `
+                        -URI "https://$Alias/$($Node.Replace(" ", "%20"))/service.svc/CES"
                 }
                 Catch {
                     #
@@ -268,6 +295,7 @@ Function New-CesDeployment {
 
         }
 
+        # Apply Configuration
         Restart-Service w3svc
 
     }

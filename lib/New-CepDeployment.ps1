@@ -102,11 +102,9 @@ Function New-CepDeployment {
 
         If ($Alias) {
             $ServicePrincipalNames = @("HTTP/$Alias")
-            #$FriendlyName = $Alias
         }
         Else {
             $ServicePrincipalNames = @("HTTP/$ServerName","HTTP/$ServerShortName")
-            #$FriendlyName = $ServerName
         }
 
         # Deploy the CEP Roles
@@ -120,12 +118,12 @@ Function New-CepDeployment {
                 Force = $True
             }
 
+            If (($_ -ne "Kerberos") -and $KeybasedRenewal.IsPresent) {
+                $Arguments.Add("KeyBasedRenewal", $True)
+            }
+
             # Install the CEP Services
             Install-AdcsEnrollmentPolicyWebService @Arguments
-
-            If (($_ -ne "Kerberos") -and $KeybasedRenewal.IsPresent) {
-                Install-AdcsEnrollmentPolicyWebService @Arguments -KeyBasedRenewal
-            }
 
         }
 
@@ -177,7 +175,7 @@ Function New-CepDeployment {
                 -ErrorAction SilentlyContinue
 
             $ADUserObject | Set-ADObject `
-                -Add @{"serviceprincipalname"=$ServicePrincipalNames}
+                -Replace @{"serviceprincipalname"=$ServicePrincipalNames}
 
             $Arguments = @{
                 Name = "WSEnrollmentPolicyServer"
@@ -238,6 +236,35 @@ Function New-CepDeployment {
 
         }
 
+        If ($Alias) {
+
+            $AuthenticationType | ForEach-Object -Process {
+
+                Write-Verbose -Message "Configuring Enrollment URI for $_ Authentication"
+
+                Switch ($_) {
+
+                    "Kerberos"      { $Node = "ADPolicyProvider_CEP_Kerberos" }
+                    "Username"      { $Node = "ADPolicyProvider_CEP_UsernamePassword" }
+                    "Certificate"   { $Node = "ADPolicyProvider_CEP_Certificate" }
+
+                }
+
+                Try {
+
+                    Set-IISURI  `
+                        -Location "Default Web Site/$Node" `
+                        -URI "https://$Alias/$Node/service.svc/CEP"
+
+                }
+                Catch {
+                    #
+                }
+
+            }
+        }
+
+        # Apply Configuration
         Restart-Service w3svc
 
     }

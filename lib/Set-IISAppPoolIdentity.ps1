@@ -19,7 +19,7 @@ Function Set-IISAppPoolIdentity {
     )
 
     begin {
-        #Import-Module WebAdministration
+        Import-Module WebAdministration
     }
 
     process {

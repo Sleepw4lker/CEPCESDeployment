@@ -1,4 +1,4 @@
-Function Set-IISFriendlyName {
+Function Set-IISURI {
 
     [cmdletbinding()]
     param(
@@ -10,7 +10,7 @@ Function Set-IISFriendlyName {
         [Parameter(Mandatory=$True)]
         [ValidateNotNullorEmpty()]
         [String]
-        $FriendlyName
+        $URI
     )
 
     begin {
@@ -19,18 +19,18 @@ Function Set-IISFriendlyName {
 
     process {
 
-        Write-Verbose "Setting IIS Friendly Name for $Location to $FriendlyName"
+        Write-Verbose "Setting IIS URI for $Location to $URI"
 
         Try {
             Set-WebConfigurationProperty `
                 -PSPath "MACHINE/WEBROOT/APPHOST/$Location" `
-                -Filter "appSettings/add[@key='FriendlyName']" `
+                -Filter "appSettings/add[@key='URI']" `
                 -Name "value" `
-                -Value $FriendlyName `
+                -Value $URI `
                 -ErrorAction SilentlyContinue
         }
         Catch {
-            Write-Verbose -Message "Unable to set IIS Friendly Name for $Location to $FriendlyName"
+            Write-Verbose -Message "Unable to set IIS URI for $Location to $URI"
         }
 
     }
