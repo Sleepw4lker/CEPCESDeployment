@@ -157,6 +157,22 @@ Function New-CepDeployment {
                     -Identity $UserName `
                     -Server $DC.HostName[0]
 
+                # Test if we can retrieve gMSA Password (if used)
+                $Haystack = (Get-ADServiceAccount `
+                    -Identity $UserName `
+                    -Server $DC.HostName[0] `
+                    -Property PrincipalsAllowedToRetrieveManagedPassword).PrincipalsAllowedToRetrieveManagedPassword
+
+                $Needle = (Get-ADComputer `
+                    -Identity $env:computername `
+                    -Server $DC.HostName[0]).distinguishedname
+
+                If (-not ($Haystack -contains $Needle)) {
+                    Write-Error `
+                        -Message "We are not permitted to retrieve the Password for $Username!"
+                    return
+                }
+
                 # Install the Group Managed Service Account on the Machine
                 $ADUserObject | Install-ADServiceAccount
             

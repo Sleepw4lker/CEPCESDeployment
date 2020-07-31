@@ -161,6 +161,22 @@ Function New-CesDeployment {
                     -Identity $UserName `
                     -Server $DC.HostName[0]
 
+                # Test if we can retrieve gMSA Password (if used)
+                $Haystack = (Get-ADServiceAccount `
+                    -Identity $UserName `
+                    -Server $DC.HostName[0] `
+                    -Property PrincipalsAllowedToRetrieveManagedPassword).PrincipalsAllowedToRetrieveManagedPassword
+
+                $Needle = (Get-ADComputer `
+                    -Identity $env:computername `
+                    -Server $DC.HostName[0]).distinguishedname
+
+                If (-not ($Haystack -contains $Needle)) {
+                    Write-Error `
+                        -Message "We are not permitted to retrieve the Password for $Username!"
+                    return
+                }
+
                 # Install the Group Managed Service Account on the Machine
                 $ADUserObject | Install-ADServiceAccount
             
@@ -259,8 +275,8 @@ Function New-CesDeployment {
 
                         "Username" {
 
-                            certutil -config "$($CaServerName)\$($CaName)" -enrollmentserverurl "https://$($ServerName)/$($CaName.Replace(" ", "%20"))_CES_Kerberos/service.svc/CES" delete
-                            certutil -config "$($CaServerName)\$($CaName)" -enrollmentserverurl "https://$($ServerShortName)/$($CaName.Replace(" ", "%20"))_CES_Kerberos/service.svc/CES" delete
+                            certutil -config "$($CaServerName)\$($CaName)" -enrollmentserverurl "https://$($ServerName)/$($CaName.Replace(" ", "%20"))_CES_UsernamePassword/service.svc/CES" delete
+                            certutil -config "$($CaServerName)\$($CaName)" -enrollmentserverurl "https://$($ServerShortName)/$($CaName.Replace(" ", "%20"))_CES_UsernamePassword/service.svc/CES" delete
                             $Node = "$($CaName)_CES_UsernamePassword"
                             certutil -config "$($CaServerName)\$($CaName)" -enrollmentserverurl "https://$($Alias)/$($Node.Replace(" ", "%20"))/service.svc/CES" UserName 1
 
@@ -268,8 +284,8 @@ Function New-CesDeployment {
 
                         "Certificate" {
                             
-                            certutil -config "$($CaServerName)\$($CaName)" -enrollmentserverurl "https://$($ServerName)/$($CaName.Replace(" ", "%20"))_CES_Kerberos/service.svc/CES" delete
-                            certutil -config "$($CaServerName)\$($CaName)" -enrollmentserverurl "https://$($ServerShortName)/$($CaName.Replace(" ", "%20"))_CES_Kerberos/service.svc/CES" delete
+                            certutil -config "$($CaServerName)\$($CaName)" -enrollmentserverurl "https://$($ServerName)/$($CaName.Replace(" ", "%20"))_CES_Certificate/service.svc/CES" delete
+                            certutil -config "$($CaServerName)\$($CaName)" -enrollmentserverurl "https://$($ServerShortName)/$($CaName.Replace(" ", "%20"))_CES_Certificate/service.svc/CES" delete
                             $Node = "$($CaName)_CES_Certificate"
 
                             If ($KeybasedRenewal.IsPresent) {
