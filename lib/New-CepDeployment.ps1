@@ -179,7 +179,7 @@ Function New-CepDeployment {
             }
             ElseIf ($ServiceAccount) {
 
-                $ADUserObject = Get-ADUser`
+                $ADUserObject = Get-ADUser `
                     -Identity $UserName `
                     -Server $DC.HostName[0]
 
